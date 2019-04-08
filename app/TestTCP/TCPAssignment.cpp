@@ -175,8 +175,7 @@ void TCPAssignment::systemCallback(UUID syscallUUID, int pid, const SystemCallPa
 			ip_buffer[3] = server_addr_in->sin_addr.s_addr;
 
 			int interface_index = RoutingInfo().getRoutingTable(ip_buffer);
-			//uint8_t ip_buffer[4];
-			bool success = RoutingInfo().getIPAddr(ip_buffer, interface_index);
+			RoutingInfo().getIPAddr(ip_buffer, interface_index);
 			// assert(RoutingInfo().getIPAddr(ip_buffer, interface_index));
 			// std::cout << "[CONNECT] server_addr : "<<server_addr_in->sin_addr.s_addr << std::endl;
 			// std::cout << "[CONNECT] server_addr : "<<std::bitset<8>(ip_buffer[0])<< std::endl;
@@ -527,7 +526,7 @@ void TCPAssignment::packetArrived(std::string fromModule, Packet* packet)
 	uint32_t ack_no; // acknowledgment number field
 
 	Sock * sock;
-	int sockfd;
+	// int sockfd;
 	struct sockey * pidfd;
 
 
@@ -580,15 +579,16 @@ void TCPAssignment::packetArrived(std::string fromModule, Packet* packet)
 
 	if(is_connected == 2){
 		// already connected.
+
+// std::cout << "[packetArrived] already connected"<< std::endl;
 	}
 
 	else if (is_connected == 1 || is_connected == 0){
 		// before connected
-// std::cout << "[packetArrived] is_connected : "<<is_connected << std::endl;
 		if(portAndIpTofd.find(*key_for_server) != portAndIpTofd.end()) {
 			pidfd = &portAndIpTofd[*key_for_server];
 			sock = fdToSock[*pidfd];
-					std::cout << "[packetArrived] server sock 1" << std::endl;
+					// std::cout << "[packetArrived] server sock 1" << std::endl;
 		}
 		else if(portAndIpTofd.find(*key_for_server2) != portAndIpTofd.end()){
 			pidfd = &portAndIpTofd[*key_for_server2];
@@ -605,30 +605,20 @@ void TCPAssignment::packetArrived(std::string fromModule, Packet* packet)
 		}
 		if(SYN && ACK){
 				std::cout << "[packetArrived] SYNACK" << std::endl;
-		 // client
-					/* SYNACK_PACKET FROM SERVER and TIME TO SEND ACK_PACKET TO SERVER*/
-
-				// assert(ack_no == sock->sock_is_client->pending_info.client_sn + 1);
-				//
-				// struct connection_TCP connection = find_connection(src_ip,dest_ip,src_port,dest_port);
+		 		/* CLIENT
+				 	 SYNACK_PACKET FROM SERVER and TIME TO SEND ACK_PACKET TO SERVER*/
 
 				server_addr_in->sin_family = AF_INET;
 				server_addr_in->sin_addr.s_addr = src_ip;
 				server_addr_in->sin_port = src_port;
 
 
-				// src_ip = client_addr_in->sin_addr.s_addr;
-				// dest_ip = server_addr_in->sin_addr.s_addr;
-				// src_port = client_addr_in->sin_port;
-				// dest_port = server_addr_in->sin_port;
-
 				uint8_t flagfield = 0b010000;
-
 				uint32_t ack_seq_no = ack_no; // sequence number field
 				uint32_t ack_ack_no = seq_no + 1; // acknowledgment number field
 				uint16_t window_size = htons(0xc800);
 
-							std::cout << "[packetArrived] SYNACK here 0" << std::endl;
+							// std::cout << "[packetArrived] SYNACK here 0" << std::endl;
 
 				struct client_TCP * new_client_TCP;
 				new_client_TCP = new client_TCP();
@@ -639,7 +629,7 @@ void TCPAssignment::packetArrived(std::string fromModule, Packet* packet)
 				sock->sock_is_client->pending_info = *new_client_TCP;
 				uint8_t header_length = 0x50;
 
-							std::cout << "[packetArrived] SYNACK here 1" << std::endl;
+							// std::cout << "[packetArrived] SYNACK here 1" << std::endl;
 
 				dest_ip = htonl(dest_ip);
 				src_ip = htonl(src_ip);
@@ -671,15 +661,13 @@ void TCPAssignment::packetArrived(std::string fromModule, Packet* packet)
 
 				this->sendPacket("IPv4", ACK_packet);
 				this->freePacket(packet);
-				std::cout << "[packetArrived] sent ACK Packet "<< std::endl;
+				// std::cout << "[packetArrived] sent ACK Packet "<< std::endl;
 				returnSystemCall(sock->syscallblock, 0);
-
 
 		}
 
 		else if(SYN || ACK){
-					// std::cout << "[packetArrived] SYN || ACK" << std::endl;
-
+					std::cout << "[packetArrived] SYN || ACK" << std::endl;
 
 					bool is_in_pending = false;
 					bool is_in_accepted = false;
@@ -705,17 +693,13 @@ void TCPAssignment::packetArrived(std::string fromModule, Packet* packet)
 							break;
 						}
 					}
-	// std::cout << "SYN CASE 2" <<std::endl;
-					// if(is_in_pending || is_in_accepted) {
-					// 	assert(0);
-					//
-					// }
 
+																					std::cout << "[packetArrived] SA 2 " << std::endl;
 
 					/* SYN_PACKET FROM CLIENT and TIME TO SEND SYNACK_PACKET TO CLIENT*/
 					if( !is_in_pending && !is_in_accepted && SYN){
 
-						if(sock->sock_is_server->backlog <= sock->sock_is_server->pending_list.size()){
+						if(sock->sock_is_server->backlog <= (int)sock->sock_is_server->pending_list.size()){
 							// drop the packet
 						}
 						else{
@@ -735,13 +719,9 @@ void TCPAssignment::packetArrived(std::string fromModule, Packet* packet)
 
 							fdToSock.insert(std::pair<struct sockey,Sock* >(*pidfd,new_sock));
 
-
-							std::cout << "[packetArrived] SYN dest_ip: "<<dest_ip << std::endl;
-							std::cout << "[packetArrived] SYN new sockfd: "<<new_sockfd << std::endl;
-
 							new_sock->sock_is_server->state = SYN_RCVD;
 							new_sock->set_sockaddr((struct sockaddr *)sock->get_sockaddr(), sizeof(struct sockaddr));
-							struct sockaddr_in * server_addr_in = (struct sockaddr_in *)new_sock->get_sockaddr();
+							// struct sockaddr_in * server_addr_in = (struct sockaddr_in *)new_sock->get_sockaddr();
 							// std::cout << "[packetArrived] SYN 3 new sock addr : " <<server_addr_in->sin_addr.s_addr<<" port : "<<server_addr_in->sin_port << std::endl;
 							client_addr_in->sin_family = AF_INET;
 							client_addr_in->sin_addr.s_addr = src_ip;
@@ -826,16 +806,13 @@ void TCPAssignment::packetArrived(std::string fromModule, Packet* packet)
 					else if( is_in_pending && !is_in_accepted && ACK){
 						/* Third Handshake (ACK segment from client) */
 						//std::cout << "In here THird handshake\n";
-						std::cout << "[packetArrived] ACK" << std::endl;
-						std::cout << "[packetArrived] dest_ip: "<<dest_ip << std::endl;
-						std::cout << "[packetArrived] dest_port: "<<dest_port << std::endl;
 
 						if(ack_no == check_pending->server_sn + 1){
 
 							/* Update Server TCP state */
 							check_pending->state = ESTABLISHED;
-							sock->sock_is_server->pending_list.erase(check_pending);
 							sock->sock_is_server->accepted_list.push_back(*check_pending);
+							sock->sock_is_server->pending_list.erase(check_pending);
 
 							this->freePacket(packet);
 
