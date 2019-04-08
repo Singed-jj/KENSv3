@@ -88,7 +88,10 @@ protected:
 
 		EXPECT_NE(ret, 0);
 
+
+std::cout <<"jot"<<std::endl;
 		close(fd);
+		std::cout <<"jot1"<<std::endl;
 	}
 };
 
@@ -120,6 +123,9 @@ protected:
 		addr.sin_addr.s_addr = htonl(INADDR_ANY);
 		addr.sin_port = htons(9999);
 
+
+
+						std::cout << "[TEST_GETSOCKNAME] addr03 :"<< addr.sin_family << addr.sin_addr.s_addr <<addr.sin_port << std::endl;
 		int ret = bind(fd, (struct sockaddr*)&addr, len);
 
 		EXPECT_EQ(ret, 0);

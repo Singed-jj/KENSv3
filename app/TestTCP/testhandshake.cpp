@@ -44,6 +44,7 @@ protected:
 		addr.sin_addr.s_addr = inet_addr(env["LISTEN_ADDR"].c_str());
 		addr.sin_port = htons(atoi(env["LISTEN_PORT"].c_str()));
 
+		std::cout << "[TestHandshake_Accept] server socket fd:"<<server_socket << std::endl;
 		int ret = bind(server_socket, (struct sockaddr*)&addr, len);
 		EXPECT_EQ(ret, 0);
 
@@ -68,8 +69,13 @@ protected:
 			socklen_t client_len = sizeof(client_addr);
 			memset(&client_addr, 0, client_len);
 			int client_fd = accept(server_socket, (struct sockaddr*)&client_addr, &client_len);
+
+														std::cout << "[testhandshake] cfd:"<<client_fd<< std::endl;
 			if(client_fd >= 0)
 			{
+
+											// std::cout << "[testhandshake] here"<< std::endl;
+
 				EXPECT_EQ(client_len, sizeof(client_addr));
 				EXPECT_EQ(client_addr.sin_family, AF_INET);
 
@@ -77,6 +83,8 @@ protected:
 				socklen_t temp_len = sizeof(temp_addr);
 				int ret = getsockname(client_fd, (struct sockaddr*)&temp_addr, &temp_len);
 				EXPECT_EQ(ret, 0);
+				std::cout << "[testhandshake] addr:"<<addr.sin_addr.s_addr<< std::endl;
+				std::cout << "[testhandshake] temp:"<<temp_addr.sin_addr.s_addr<< std::endl;
 				EXPECT_TRUE( (addr.sin_addr.s_addr == 0) ||
 						(addr.sin_addr.s_addr == temp_addr.sin_addr.s_addr));
 				EXPECT_EQ(addr.sin_family, temp_addr.sin_family);
@@ -614,6 +622,7 @@ protected:
 		bind_addr.sin_addr.s_addr = inet_addr(env["BIND_ADDR"].c_str());
 		bind_addr.sin_port = htons(atoi(env["BIND_PORT"].c_str()));
 
+		std::cout << "[TestHandshake_Accept] client" << std::endl;
 		int ret = bind(client_socket, (struct sockaddr*)&bind_addr, bind_len);
 		EXPECT_EQ(ret, 0);
 
