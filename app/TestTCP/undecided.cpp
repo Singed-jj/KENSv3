@@ -29,13 +29,6 @@ Sock::~Sock(){
   // this->sip_dip.clear();
 }
 
-void Sock::set_sockaddr(struct sockaddr * sockaddr, int addrlen){
-  memcpy(this->addr, sockaddr, addrlen);
-  // this.addr = sockaddr;
-}
-struct sockaddr * Sock::get_sockaddr(void){
-  return this->addr;
-}
 
 
 }

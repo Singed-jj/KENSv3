@@ -58,7 +58,7 @@ void TCPAssignment::systemCallback(UUID syscallUUID, int pid, const SystemCallPa
 	int retval;
 	int * addrlen;
 	uint16_t port;
-	uint32_t addr;
+	uint32_t ip;
 	struct sockaddr* client_addr;
 	struct sockaddr* server_addr;
 
@@ -102,19 +102,45 @@ void TCPAssignment::systemCallback(UUID syscallUUID, int pid, const SystemCallPa
 		Sock * sock = this->fdToSock[*pidfd];
 
 		// remove fd
-		this->fdToSock.erase(*pidfd);
-		removeFileDescriptor(pid, sockfd);
-
 		if(sock->binded == 0) {
 			returnSystemCall(syscallUUID, retval);
 			break;
 		}
-		port = ((struct sockaddr_in *)sock->get_sockaddr())->sin_port;
-    addr = ((struct sockaddr_in *)sock->get_sockaddr())->sin_addr.s_addr;
 
+		port = ((struct sockaddr_in *)sock->addr)->sin_port;
+    ip = ((struct sockaddr_in *)sock->addr)->sin_addr.s_addr;
+
+		/* CLIENT CLOSE START*/
+
+		struct sockaddr_in *server_addr_in = get_server_addr(sockfd, (struct sockaddr_in *)sock->addr, connection_list);
+		if (server_addr_in){
+			uint32_t src_ip = ip;
+			uint32_t dest_ip = server_addr_in->sin_addr.s_addr;
+			uint16_t src_port = port;
+			uint16_t dest_port = server_addr_in->sin_port;
+			uint32_t fin_syn_no = rand % 100000;
+			uint32_t fin_ack_no = 0;
+			uint8_t flagfield = 0b000001;
+
+			Packet * FIN_packet = this->allocatePacket(54);
+			write_packet(Fin_packet,flagfield,src_ip,dest_ip,src_port,dest_port,fin_syn_no,fin_ack_no);
+			this->sendPacket("IPV4",FIN_packet);
+			sock->state = FIN_WAIT1;
+			sock->syscallblock = syscallUUID;
+
+			struct client_TCP * new_client_TCP = new client_TCP();
+			new_client_TCP->state = FIN_WAIT1;
+			new_client_TCP->sever_addr = (struct sockaddr *)server_addr_in;
+			uint32_t client_sn = fin_syn_no;
+
+			sock->sock_is_client->pending_info = *new_client_TCP;
+		}
+		/* CLIENT CLOSE END*/
+
+		/* In TIMER_CALL_BACK
 		struct key * k = (struct key *)malloc(sizeof(key));
 		k->port = port;
-		k->ip = addr;
+		k->ip = ip;
 
 		if(this->allPort.find(port) == this->allPort.end()){
 			// port not binded
@@ -128,6 +154,7 @@ void TCPAssignment::systemCallback(UUID syscallUUID, int pid, const SystemCallPa
 		retval = 0;
 		sock->~Sock();
 		returnSystemCall(syscallUUID, retval);
+		*/
 
 		//this->syscall_close(syscallUUID, pid, param.param1_int);
 		break;
@@ -162,7 +189,7 @@ void TCPAssignment::systemCallback(UUID syscallUUID, int pid, const SystemCallPa
 					// assert(0);
 		if(sock->binded > 0){
 			/* Already binded */
-			client_addr = sock->get_sockaddr();
+			client_addr = sock->addr;
 		}
 		else{
 
@@ -176,12 +203,6 @@ void TCPAssignment::systemCallback(UUID syscallUUID, int pid, const SystemCallPa
 
 			int interface_index = RoutingInfo().getRoutingTable(ip_buffer);
 			RoutingInfo().getIPAddr(ip_buffer, interface_index);
-			// assert(RoutingInfo().getIPAddr(ip_buffer, interface_index));
-			// std::cout << "[CONNECT] server_addr : "<<server_addr_in->sin_addr.s_addr << std::endl;
-			// std::cout << "[CONNECT] server_addr : "<<std::bitset<8>(ip_buffer[0])<< std::endl;
-			// std::cout << "[CONNECT] server_addr : "<<std::bitset<8>(ip_buffer[1])<< std::endl;
-			// std::cout << "[CONNECT] server_addr : "<<std::bitset<8>(ip_buffer[2])<< std::endl;
-			// std::cout << "[CONNECT] server_addr : "<<(u_long)(ip_buffer)<< std::endl;
 
 			((struct sockaddr_in *)client_addr)->sin_addr.s_addr = *ip_buffer;
 
@@ -202,7 +223,7 @@ void TCPAssignment::systemCallback(UUID syscallUUID, int pid, const SystemCallPa
 			((struct sockaddr_in *)client_addr)->sin_port = port_buffer;
 
 			// client socket address setting.
-			sock->set_sockaddr(client_addr, sizeof(client_addr));
+			sock->addr = client_addr;
 			if(!(this->allPort.insert(std::pair<uint16_t,int>(port,1)).second)){
 				++this->allPort[port];
 			}
@@ -220,27 +241,12 @@ void TCPAssignment::systemCallback(UUID syscallUUID, int pid, const SystemCallPa
 		uint32_t dest_ip = htonl(server_addr_in->sin_addr.s_addr);
 		uint16_t src_port = htons(client_addr_in->sin_port);
 		uint16_t dest_port = htons(server_addr_in->sin_port);
-
-		//
-		// std::cout << "[CONNECT]" << src_ip << std::endl;
-		// std::cout << "[CONNECT]" << dest_ip<< std::endl;
-		// std::cout << "[CONNECT]" << src_port << std::endl;
-		// std::cout << "[CONNECT]" << dest_port << std::endl;
-
 		uint8_t flagfield = 0b000010;
-
 		uint32_t seq_no = rand() % 10000; // sequence number field
-		// uint32_t seq_no = 0xfffff4e1;
 		uint32_t ack_no = 0; // acknowledgment number field
-		uint16_t window_size = htons(0xc800);
-
 
 		/* Update sent socket to sent socket list */
 
-		// struct sent_socket* new_sent_socket;
-		// new_sent_socket = new sent_socket();
-		// new_sent_socket->fd = sockfd;
-		// sock->client_addr = client_addr;
 	  sock->syscallblock = syscallUUID;
 		sock->binded = 1;
 
@@ -265,33 +271,14 @@ void TCPAssignment::systemCallback(UUID syscallUUID, int pid, const SystemCallPa
 		* 14+10: checksum (2bytes)                      *
 		*************************************************/
 		Packet * SYN_packet = this->allocatePacket(54);
-		SYN_packet->writeData(14+12, &src_ip, 4);
-		SYN_packet->writeData(14+16, &dest_ip, 4);
-		SYN_packet->writeData(14+20, &src_port, 2);
-		SYN_packet->writeData(14+22, &dest_port, 2);
-		SYN_packet->writeData(14+24, &seq_no, 4);
-		SYN_packet->writeData(14+28, &ack_no, 4);
-		SYN_packet->writeData(14+32, &header_length, 1);
-		SYN_packet->writeData(14+32+1, &flagfield, 1);
-		SYN_packet->writeData(14+32+1+1, &window_size, 2);
 
-		uint8_t tcp_header_buffer[20];
-		SYN_packet->readData(14+20, tcp_header_buffer,20 );
-		// uint16_t checksum = NetworkUtil::one_sum(tcp_header_buffer,20);
-		uint16_t checksum = NetworkUtil::tcp_sum(src_ip,dest_ip,tcp_header_buffer,20);
-		checksum = ~checksum;
-		if(checksum == 0xFFFF) checksum = 0;
-		checksum = htons(checksum);
-		SYN_packet->writeData(14+ 32+1+1+2, (uint8_t*)&checksum, 2);
-
-
+		write_packet(SYN_packet, flagfield, src_ip, dest_ip, src_port,dest_port,seq_no, ack_no);
 		this->sendPacket("IPv4", SYN_packet);
 
-		struct connection_TCP * new_bct;
-		new_bct = new connection_TCP();
-		new_bct->client_addr_in = client_addr_in;
-		new_bct->server_addr_in = server_addr_in;
-		this->before_connection_list.push_back(*new_bct);
+		struct connection_TCP * new_conn = new connection_TCP();
+		new_conn->client_addr_in = client_addr_in;
+		new_conn->server_addr_in = server_addr_in;
+		before_connection_list.push_back(*new_conn);
 
 		// std::cout << "[CONNECT] sent SYN Packet "<< std::endl;
 		break;
@@ -333,18 +320,12 @@ void TCPAssignment::systemCallback(UUID syscallUUID, int pid, const SystemCallPa
 		pidfd->fd = sockfd;
 
 		struct sockaddr_in * client_addr_in = (struct sockaddr_in *)param.param2_ptr;
-		client_addr_in->sin_family = AF_INET;
-
-		std::cout << "[ACCEPT] sin_family AF_INET : "<<AF_INET << std::endl;
-
+		client_addr_in->sin_family = AF_INET; // 임시방편.
 
 		bool is_there_listen = false;
 
 		std::vector<Sock>::iterator listen_to_accept;
 
-		// if(fdToSock[sockfd]->sock_is_server->pid >0){
-		// 		// std::cout << "[ACCEPT] other host is accepting"<< pid<< std::endl;
-		// }
 
 		for( listen_to_accept = listening_sock.begin(); listen_to_accept!= listening_sock.end(); listen_to_accept++)
 		{
@@ -370,7 +351,7 @@ void TCPAssignment::systemCallback(UUID syscallUUID, int pid, const SystemCallPa
 		pidfd->pid = pid;
 		pidfd->fd = sockfd;
 
-				std::cout << "[BIND] START!! "<< sockfd<< std::endl;
+				// std::cout << "[BIND] START!! "<< sockfd<< std::endl;
 		server_addr = (struct sockaddr *)param.param2_ptr;
 
 		struct sockaddr_in * server_addr_in = new sockaddr_in();
@@ -379,17 +360,17 @@ void TCPAssignment::systemCallback(UUID syscallUUID, int pid, const SystemCallPa
 		server_addr_in->sin_family = ((struct sockaddr_in *)server_addr)->sin_family;
 		addrlen = (int *)&param.param3_int;
 
-		std::cout << "[BIND] server_ip: "<<server_addr_in->sin_addr.s_addr<< std::endl;
-		std::cout << "[BIND] server_port: "<<server_addr_in->sin_port<< std::endl;
+		// std::cout << "[BIND] server_ip: "<<server_addr_in->sin_addr.s_addr<< std::endl;
+		// std::cout << "[BIND] server_port: "<<server_addr_in->sin_port<< std::endl;
 
 		port = server_addr_in->sin_port;
-		addr = server_addr_in->sin_addr.s_addr;
+		ip = server_addr_in->sin_addr.s_addr;
 
 		Sock * sock = fdToSock[*pidfd];
 
 		struct key * k = (struct key *)malloc(sizeof(key));
 		k->port = port;
-		k->ip = addr;
+		k->ip = ip;
 
 		struct key * buf = (struct key *)malloc(sizeof(key));
 		memset(buf, 0, sizeof(key));
@@ -397,25 +378,25 @@ void TCPAssignment::systemCallback(UUID syscallUUID, int pid, const SystemCallPa
 		// buf[sizeof(u_short)] = htonl(INADDR_ANY);
 		buf->ip = INADDR_ANY;
 
-		if( (sock->binded > 0 && ((struct sockaddr_in *)sock->get_sockaddr())->sin_port != port) || // 이미 binded 되었거나
+		if( (sock->binded > 0 && ((struct sockaddr_in *)sock->addr)->sin_port != port) || // 이미 binded 되었거나
 			 	this->fdToSock.find(*pidfd) == this->fdToSock.end()|| // sock 의 fd 가 this->fdToSock 에 없거나
 				this->portAndIpTofd.find(*k) != this->portAndIpTofd.end() || // bind 하려는 ip:port 에 연결된 fd(=>sock) 이 있거나
 				this->portAndIpTofd.find(*buf) != this->portAndIpTofd.end() || // bind 하려는 :port 가 0.0.0.0/0:port 에 binded 되어있거나
-				(this->allPort.find(port) != this->allPort.end() && addr == INADDR_ANY)){ //port 가 사용중이고, bind 하려는 ip 가 0.0.0.0/0 이거나
+				(this->allPort.find(port) != this->allPort.end() && ip == INADDR_ANY)){ //port 가 사용중이고, bind 하려는 ip 가 0.0.0.0/0 이거나
 
 									std::cout << "[BIND] here!!! :"<< this->allPort[port] << std::endl;
-									std::cout << "[BIND] 0:"<< (sock->binded > 0 && ((struct sockaddr_in *)sock->get_sockaddr())->sin_port != port)<< std::endl;
+									std::cout << "[BIND] 0:"<< (sock->binded > 0 && ((struct sockaddr_in *)sock->addr)->sin_port != port)<< std::endl;
 									std::cout << "[BIND] 1:"<< (this->fdToSock.find(*pidfd) == this->fdToSock.end())<< std::endl;
 									std::cout << "[BIND] 2:"<< (this->portAndIpTofd.find(*k) != this->portAndIpTofd.end() )<< std::endl;
 									std::cout << "[BIND] 3:"<< (this->portAndIpTofd.find(*buf) != this->portAndIpTofd.end() )<< std::endl;
-									std::cout << "[BIND] 4:"<< (this->allPort.find(port) != this->allPort.end() && addr == htonl(INADDR_ANY))<< std::endl;
+									std::cout << "[BIND] 4:"<< (this->allPort.find(port) != this->allPort.end() && ip == htonl(INADDR_ANY))<< std::endl;
 			retval = -1;
 					// std::cout << syscallUUID << std::endl;
 			returnSystemCall(syscallUUID, retval);
 			break;
 		}
 
-		sock->set_sockaddr((struct sockaddr *)server_addr_in,*addrlen);
+		sock->addr = (struct sockaddr *)server_addr_in;
 
 		// port 사용중인 ip 갯수.
 		if(!(this->allPort.insert(std::pair<uint16_t,int>(port,1)).second)){
@@ -452,8 +433,8 @@ void TCPAssignment::systemCallback(UUID syscallUUID, int pid, const SystemCallPa
 		pidfd->fd = sockfd;
 
 		struct sockaddr_in * addr_in = new sockaddr_in();
-		memcpy(addr_in, fdToSock[*pidfd]->get_sockaddr(), sizeof(struct sockaddr_in));
-   std::cout << "[GETSOCKNAME] addr : "<<addr_in->sin_addr.s_addr<<" port: "<<addr_in->sin_port<< std::endl;
+		memcpy(addr_in, fdToSock[*pidfd]->addr, sizeof(struct sockaddr_in));
+   // std::cout << "[GETSOCKNAME] addr : "<<addr_in->sin_addr.s_addr<<" port: "<<addr_in->sin_port<< std::endl;
 		addr_in->sin_addr.s_addr = htonl(addr_in->sin_addr.s_addr);
 		addr_in->sin_port = htons(addr_in->sin_port);
 
@@ -579,8 +560,47 @@ void TCPAssignment::packetArrived(std::string fromModule, Packet* packet)
 
 	if(is_connected == 2){
 		// already connected.
+		// std::cout << "[packetArrived] already connected"<< std::endl;
 
-// std::cout << "[packetArrived] already connected"<< std::endl;
+		if(ACK && sock->state == FIN_WAIT1){
+
+			sock->sock_is_client->pending_info->client_sn
+			if(ack_no == sock->sock_is_client->pending_info->client_sn + 1){
+				sock->state = FIN_WAIT2;
+				sock->sock_is_client->pending_info->state = FIN_WAIT2;
+			}
+		}
+
+		else if(FIN && (sock->state == FIN_WAIT2 || sock->state == TIMED_WAIT)){
+			if(sock->state == TIMED_WAIT) this->cancelTimer(sock->timer_key);
+			Time time_wait = this->makeTime(60,SEC);
+			uint32_t ack_seq_no = ack_no; // sequence number field
+			uint32_t ack_ack_no = seq_no + 1; // acknowledgment number field
+			uint8_t flagfield = 0b010000;
+			// sock_cmd_obj->sock = sock;
+			// sock_cmd_obj->cmd = CLOSE;
+
+			dest_ip = htonl(dest_ip);
+			src_ip = htonl(src_ip);
+			dest_port = htons(dest_port);
+			src_port = htons(src_port);
+			ack_seq_no = htonl(ack_seq_no);
+			ack_ack_no = htonl(ack_ack_no);
+
+			sock->sock_is_client->pending_info->server_sn = seq_no;
+
+			Packet * ACK_packet = this->allocatePacket(54);
+			write_packet(ACK_packet,flagfield,est_ip,src_ip,dest_port,src_port,ack_seq_no,ack_ack_no);
+
+			UUID timer_key = this->addTimer(sock,time_wait);
+			sock->timer_key = timer_key;
+			sock->state = TIMED_WAIT;
+			sock->sock_is_client->pending_info->state = TIMED_WAIT;
+		}
+
+		elseif(FIN && sock->state == ESTB)
+		this->freePacket(packet);
+
 	}
 
 	else if (is_connected == 1 || is_connected == 0){
@@ -604,7 +624,7 @@ void TCPAssignment::packetArrived(std::string fromModule, Packet* packet)
 			// std::cout << "[packetArrived] <DANGEROUS> no key for server !! " << std::endl;
 		}
 		if(SYN && ACK){
-				std::cout << "[packetArrived] SYNACK" << std::endl;
+				// std::cout << "[packetArrived] SYNACK" << std::endl;
 		 		/* CLIENT
 				 	 SYNACK_PACKET FROM SERVER and TIME TO SEND ACK_PACKET TO SERVER*/
 
@@ -622,7 +642,7 @@ void TCPAssignment::packetArrived(std::string fromModule, Packet* packet)
 
 				struct client_TCP * new_client_TCP;
 				new_client_TCP = new client_TCP();
-				new_client_TCP->state = ESTABLISHED;
+				new_client_TCP->state = ESTB;
 				new_client_TCP->server_addr = (struct sockaddr *)server_addr_in;
 				new_client_TCP->server_sn = seq_no;
 				new_client_TCP->client_sn = ack_no;
@@ -639,35 +659,18 @@ void TCPAssignment::packetArrived(std::string fromModule, Packet* packet)
 				ack_ack_no = htonl(ack_ack_no);
 
 				Packet * ACK_packet = this->allocatePacket(54);
-				ACK_packet->writeData(14+12, &dest_ip, 4);
-				ACK_packet->writeData(14+16, &src_ip, 4);
-				ACK_packet->writeData(14+20, &dest_port, 2);
-				ACK_packet->writeData(14+22, &src_port, 2);
-				ACK_packet->writeData(14+24, &ack_seq_no, 4);
-				ACK_packet->writeData(14+28, &ack_ack_no, 4);
-				ACK_packet->writeData(14+32, &header_length, 1);
-				ACK_packet->writeData(14+32+1, &flagfield, 1);
-				ACK_packet->writeData(14+32+1+1, &window_size, 2);
-
-				uint8_t tcp_header_buffer[20];
-				ACK_packet->readData(14+20, tcp_header_buffer,20 );
-				uint16_t checksum = NetworkUtil::tcp_sum(dest_ip,src_ip,tcp_header_buffer,20);
-				// uint16_t checksum = NetworkUtil::one_sum(tcp_header_buffer,20);
-				checksum = ~checksum;
-				if(checksum == 0xFFFF) checksum = 0;
-				checksum = htons(checksum);
-				ACK_packet->writeData(14+ 32+1+1+2, (uint8_t*)&checksum, 2);
+				write_packet(ACK_packet, flagfield,dest_ip,src_ip,dest_port,src_port,ack_seq_no,ack_ack_no);
 
 
 				this->sendPacket("IPv4", ACK_packet);
 				this->freePacket(packet);
 				// std::cout << "[packetArrived] sent ACK Packet "<< std::endl;
 				returnSystemCall(sock->syscallblock, 0);
-
+				bef_to_con(dest_ip,src_ip,dest_port,src_port);
 		}
 
 		else if(SYN || ACK){
-					std::cout << "[packetArrived] SYN || ACK" << std::endl;
+					// std::cout << "[packetArrived] SYN || ACK" << std::endl;
 
 					bool is_in_pending = false;
 					bool is_in_accepted = false;
@@ -676,6 +679,8 @@ void TCPAssignment::packetArrived(std::string fromModule, Packet* packet)
 					std::vector<server_TCP>::iterator check_pending;
 					std::vector<server_TCP>::iterator check_accept;
 
+
+					// std::cout << "[packetArrived] SA 0 " << std::endl;
 					for( check_pending = sock->sock_is_server->pending_list.begin(); check_pending!= sock->sock_is_server->pending_list.end(); check_pending++)
 					{
 						client_addr_in = (struct sockaddr_in *)check_pending->client_addr;
@@ -684,6 +689,7 @@ void TCPAssignment::packetArrived(std::string fromModule, Packet* packet)
 							break;
 						}
 					}
+					// std::cout << "[packetArrived] SA 1 " << std::endl;
 
 					for( check_accept = sock->sock_is_server->accepted_list.begin(); check_accept!= sock->sock_is_server->accepted_list.end(); check_accept++)
 					{
@@ -694,7 +700,7 @@ void TCPAssignment::packetArrived(std::string fromModule, Packet* packet)
 						}
 					}
 
-																					std::cout << "[packetArrived] SA 2 " << std::endl;
+					// std::cout << "[packetArrived] SA 2 " << std::endl;
 
 					/* SYN_PACKET FROM CLIENT and TIME TO SEND SYNACK_PACKET TO CLIENT*/
 					if( !is_in_pending && !is_in_accepted && SYN){
@@ -704,55 +710,51 @@ void TCPAssignment::packetArrived(std::string fromModule, Packet* packet)
 						}
 						else{
 
-																std::cout << "[packetArrived] SYN " << std::endl;
-							struct server_TCP * new_pending;
-							client_addr_in = new sockaddr_in();
+																// std::cout << "[packetArrived] SYN " << std::endl;
 
-							new_pending = new server_TCP();
-							new_pending->state = SYN_RCVD;
 
 							int new_sockfd = createFileDescriptor(sock->pid);
 							Sock * new_sock = new Sock(AF_INET,SOCK_STREAM,IPPROTO_TCP,new_sockfd);
 							pidfd = new sockey();
 							pidfd->pid = sock->pid;
 							pidfd->fd = new_sockfd;
+							new_sock->sock_is_server->state = SYN_RCVD;
+							new_sock->addr = (struct sockaddr *)sock->addr;
 
 							fdToSock.insert(std::pair<struct sockey,Sock* >(*pidfd,new_sock));
 
-							new_sock->sock_is_server->state = SYN_RCVD;
-							new_sock->set_sockaddr((struct sockaddr *)sock->get_sockaddr(), sizeof(struct sockaddr));
 							// struct sockaddr_in * server_addr_in = (struct sockaddr_in *)new_sock->get_sockaddr();
 							// std::cout << "[packetArrived] SYN 3 new sock addr : " <<server_addr_in->sin_addr.s_addr<<" port : "<<server_addr_in->sin_port << std::endl;
+							client_addr_in = new sockaddr_in();
 							client_addr_in->sin_family = AF_INET;
 							client_addr_in->sin_addr.s_addr = src_ip;
 							client_addr_in->sin_port = src_port;
 
+							server_addr_in = new sockaddr_in();
+							server_addr_in->sin_family = AF_INET;
+							server_addr_in->sin_addr.s_addr = dest_ip;
+							server_addr_in->sin_port = dest_port;
+
 							uint32_t synack_seq_no = rand() % 10000;
 							uint32_t synack_ack_no = seq_no + 1;
 
+							struct server_TCP * new_pending = new server_TCP();
+							new_pending->state = SYN_RCVD;
 							new_pending->client_addr = (struct sockaddr *)client_addr_in;
+							new_pending->server_addr = (struct sockaddr *)server_addr_in;
 							new_pending->server_sn = synack_seq_no;
 							new_pending->client_sn = seq_no;
 							new_pending->sockfd = new_sockfd;
-																													// std::cout << "[packetArrived] SYN 4" << std::endl;
 							sock->sock_is_server->pending_list.push_back(*new_pending);
-							/* Send Reply to Client */
 
-
-
+							struct connection_TCP * new_conn = new connection_TCP();
+							new_conn->client_addr_in = client_addr_in;
+							new_conn->server_addr_in = server_addr_in;
+							new_conn->sockfd = new_sockfd;
+							before_connection_list.push_back(*new_conn);
 
 							Packet* SYNACK_packet = this->allocatePacket(54);
-							/*
-							std::cout<<std::hex<<"0x"<<dest_ip<<"\n";
-							std::cout<<std::hex<<"0x"<<src_ip<<"\n";
-							std::cout<<std::hex<<"0x"<<dest_port<<"\n";
-							std::cout<<std::hex<<"0x"<<src_port<<"\n";
-							std::cout<<std::hex<<"0x"<<send_seq<<"\n";
-							std::cout<<std::hex<<"0x"<<send_ack<<"\n";
-							*/
 							uint8_t flagfield = 0b010010;
-							uint8_t header_length = 0x50;
-							uint16_t window_size = htons(0xc800);
 
 							dest_ip = htonl(dest_ip);
 							src_ip = htonl(src_ip);
@@ -761,44 +763,11 @@ void TCPAssignment::packetArrived(std::string fromModule, Packet* packet)
 							synack_seq_no = htonl(synack_seq_no);
 							synack_ack_no = htonl(synack_ack_no);
 
-							SYNACK_packet->writeData(14+12, (uint8_t*)&dest_ip, 4);
-							SYNACK_packet->writeData(14+16, (uint8_t*)&src_ip, 4);
-							SYNACK_packet->writeData(14+20, (uint8_t*)&dest_port, 2);
-							SYNACK_packet->writeData(14+22, (uint8_t*)&src_port, 2);
-							SYNACK_packet->writeData(14+24, (uint8_t*)&synack_seq_no, 4);
-							SYNACK_packet->writeData(14+28, (uint8_t*)&synack_ack_no, 4);
-							SYNACK_packet->writeData(14+28+4, (uint8_t*)&header_length, 1);
-							SYNACK_packet->writeData(14+28+4+1, &flagfield, 1);
-							SYNACK_packet->writeData(14+33+1, &window_size, 2);
-
-
-
-							// std::cout<<std::hex<<"0x"<<dest_ip<<"\n";
-							// std::cout<<std::hex<<"0x"<<src_ip<<"\n";
-							// std::cout<<std::hex<<"0x"<<dest_port<<"\n";
-							// std::cout<<std::hex<<"0x"<<src_port<<"\n";
-							// std::cout<<std::hex<<"0x"<<synack_seq_no<<"\n";
-							// std::cout<<std::hex<<"0x"<<synack_ack_no<<"\n";
-							/*
-							std::cout<<sendflag<<"\n";
-
-
-							std::cout<<std::hex<<"0x"<<unsigned(sendflag)<<"\n";
-							*/
-
-
-
-							uint8_t tcp_header_buffer[20];
-							SYNACK_packet->readData(14+20, tcp_header_buffer,20 );
-							uint16_t checksum = NetworkUtil::tcp_sum(dest_ip,src_ip,tcp_header_buffer,20);
-							// uint16_t checksum = NetworkUtil::one_sum(tcp_header_buffer,20);
-							checksum = ~checksum;
-							if(checksum == 0xFFFF) checksum = 0;
-							checksum = htons(checksum);
-							SYNACK_packet->writeData(14+ 32+1+1+2, (uint8_t*)&checksum, 2);
+							write_packet(SYNACK_packet, flagfield, dest_ip, src_ip, dest_port, src_port,
+															synack_seq_no, synack_ack_no);
 
 							this->sendPacket("IPv4", SYNACK_packet);
-							std::cout << "[packetArrived] sent SYNACK Packet" << std::endl;
+							// std::cout << "[packetArrived] sent SYNACK Packet" << std::endl;
 						}
 						this->freePacket(packet);
 					}
@@ -810,7 +779,7 @@ void TCPAssignment::packetArrived(std::string fromModule, Packet* packet)
 						if(ack_no == check_pending->server_sn + 1){
 
 							/* Update Server TCP state */
-							check_pending->state = ESTABLISHED;
+							check_pending->state = ESTB;
 							sock->sock_is_server->accepted_list.push_back(*check_pending);
 							sock->sock_is_server->pending_list.erase(check_pending);
 
@@ -834,34 +803,37 @@ void TCPAssignment::packetArrived(std::string fromModule, Packet* packet)
 
 void TCPAssignment::timerCallback(void* payload)
 {
-	// Sock * sock = (Sock *)payload;
-	// uint32_t src_ip = ((struct sockaddr_in *)sock->get_sockaddr())->sin_addr.s_addr;
-	// uint16_t src_port = ((struct sockaddr_in *)sock->get_sockaddr())->sin_port;
-	// uint32_t dest_ip;
-	// uint16_t dest_port;
-	//
-  // std::vector<server_TCP>::iterator check_tcp;
-	// check_tcp = sock->sock_is_server->accepted_list.begin();
-	// dest_ip = ((struct sockaddr_in *)check_tcp->client_addr)->sin_addr.s_addr;
-	// dest_port = ((struct sockaddr_in *)check_tcp->client_addr)->sin_port;
-	//
-	// if(get_connection_no(src_ip,dest_ip,src_port,dest_port) == 1){
-	// 	struct connection_TCP connection = find_connection(src_ip,dest_ip,src_port,dest_port);
-	// 	int fd = connection.sockfd;
-	// 	sock->sock_is_server->accepted_list.erase(check_tcp);
-	// 	// before_connection_list.pop_front();
-	// 	connection_list.push_back(connection);
-	// 	returnSystemCall(check_tcp->syscallblock, fd);
-	// }
-	// else{
-	// 	// this->addTimer(payload, 1);
-	// }
-	//
-	//
+	/* CLIENT TIMERCALLBACK */
+	Sock * sock = (Sock *)payload;
+	uint32_t src_ip = ((struct sockaddr_in *)sock->addr)->sin_addr.s_addr;
+	uint16_t src_port = ((struct sockaddr_in *)sock->addr)->sin_port;
+	uint32_t dest_ip = ((struct sockaddr_in *)sock->sock_is_client->server_addr)->sin_addr.s_addr;
+	uint16_t dest_port = ((struct sockaddr_in *)sock->sock_is_client->server_addr)->sin_port;
+	struct sockey * pidfd = new sockey();
+	pidfd->pid = sock->pid;
+	pidfd->fd = sock->sockfd;
 
-	// payload <= socket
-	// connection exist => returnSystemCall
-	// connection not exist sleep again.
+
+	struct key * k = (struct key *)malloc(sizeof(key));
+	k->port = src_port;
+	k->ip = src_ip;
+
+	if(this->allPort.find(port) == this->allPort.end()){
+		// port not binded
+	}
+	else {
+		if(this->allPort[port] == 1) this->allPort.erase(port);
+		else this->allPort[port]--;
+		this->portAndIpTofd.erase(*k);
+	}
+	retval = 0;
+	returnSystemCall(sock->syscallblock, retval);
+
+	delete_con(src_ip,dest_ip,src_port,dest_port);
+	free(find_connection(src_ip,dest_ip,src_port,dest_port));
+	removeFileDescriptor(sock->pid, sock->sockfd);
+	this->fdToSock.erase(*pidfd);
+	sock->~Sock();
 
 
 }
@@ -904,10 +876,11 @@ int TCPAssignment::get_connection_no(uint32_t src_ip, uint32_t dest_ip, uint16_t
 }
 
 
-struct connection_TCP TCPAssignment::find_connection(uint32_t src_ip, uint32_t dest_ip, uint16_t src_port, uint16_t dest_port){
+struct connection_TCP TCPAssignment::find_connection(uint32_t src_ip, uint32_t dest_ip, uint16_t src_port, uint16_t dest_port, std::vector<connection_TCP> * befOrConlist ){
 	std::vector<connection_TCP>::iterator connection;
+	std::vector<connection_TCP> list = *befOrConlist;
 	// std::cout << "[find_connection] here"<< std::endl;
-	for( connection = before_connection_list.begin(); connection!= before_connection_list.end(); connection++)
+	for( connection = list.begin(); connection!= list.end(); connection++)
 	{
 		struct sockaddr_in * addr_in_1 = connection->client_addr_in;
 		struct sockaddr_in * addr_in_2 = connection->server_addr_in;
@@ -923,25 +896,70 @@ struct connection_TCP TCPAssignment::find_connection(uint32_t src_ip, uint32_t d
 		}
 	}
 
-	struct connection_TCP * null_connection =  new connection_TCP();
-	return *null_connection;
+	return *(new connection_TCP());
+}
+
+
+
+void TCPAssignment::bef_to_con(uint32_t src_ip, uint32_t dest_ip, uint16_t src_port, uint16_t dest_port){
+	std::vector<connection_TCP>::iterator connection;
+	for( connection = before_connection_list.begin(); connection!= before_connection_list.end(); connection++)
+	{
+		struct sockaddr_in * addr_in_1 = connection->server_addr_in;
+		struct sockaddr_in * addr_in_2 = connection->client_addr_in;
+
+		if(addr_in_1->sin_port == src_port && addr_in_1->sin_addr.s_addr == src_ip &&
+				addr_in_2->sin_port == dest_port && addr_in_2->sin_addr.s_addr == dest_ip){
+					connection_list.push_back(*connection);
+					before_connection_list.erase(connection);
+					return;
+		}
+		else if(addr_in_1->sin_port == dest_port && addr_in_1->sin_addr.s_addr == dest_ip &&
+				addr_in_2->sin_port == src_port && addr_in_2->sin_addr.s_addr == src_ip){
+					connection_list.push_back(*connection);
+					before_connection_list.erase(connection);
+					return;
+
+		}
+	}
+}
+
+void TCPAssignment::delete_con(uint32_t src_ip, uint32_t dest_ip, uint16_t src_port, uint16_t dest_port){
+	std::vector<connection_TCP>::iterator connection;
+	for( connection = connection_list.begin(); connection!= connection_list.end(); connection++)
+	{
+		struct sockaddr_in * addr_in_1 = connection->server_addr_in;
+		struct sockaddr_in * addr_in_2 = connection->client_addr_in;
+
+		if(addr_in_1->sin_port == src_port && addr_in_1->sin_addr.s_addr == src_ip &&
+				addr_in_2->sin_port == dest_port && addr_in_2->sin_addr.s_addr == dest_ip){
+					connection_list.erase(connection);
+					return;
+		}
+		else if(addr_in_1->sin_port == dest_port && addr_in_1->sin_addr.s_addr == dest_ip &&
+				addr_in_2->sin_port == src_port && addr_in_2->sin_addr.s_addr == src_ip){
+					connection_list.erase(connection);
+					return;
+
+		}
+	}
 }
 
 bool TCPAssignment::accept_now(Sock * listen_to_accept, UUID syscallUUID){
+
 	bool returned = false;
 	std::vector<server_TCP>::iterator check_tcp;
 	for(check_tcp = listen_to_accept->sock_is_server->accepted_list.begin();
 				check_tcp != listen_to_accept->sock_is_server->accepted_list.end(); check_tcp++){
 
-				struct connection_TCP * new_connection = new connection_TCP();
-				new_connection->client_addr_in = (struct sockaddr_in*)check_tcp->client_addr;
-				new_connection->server_addr_in = (struct sockaddr_in*)listen_to_accept->get_sockaddr();
-				new_connection->sockfd = check_tcp->sockfd;
-				connection_list.push_back(*new_connection);
-				std::cout << "[ACCEPT_NOW] new sockfd:"<<new_connection->sockfd<< std::endl;
-				std::cout << "[ACCEPT_NOW] server_ip:"<<new_connection->server_addr_in->sin_addr.s_addr<< std::endl;
+				struct sockaddr_in * client_addr_in = (struct sockaddr_in*)check_tcp->client_addr;
+				struct sockaddr_in * server_addr_in = (struct sockaddr_in*)check_tcp->server_addr;
+				bef_to_con(server_addr_in->sin_addr.s_addr,client_addr_in->sin_addr.s_addr,
+											server_addr_in->sin_port, client_addr_in->sin_port);
+				// std::cout << "[ACCEPT_NOW] new sockfd:"<<check_tcp->sockfd<< std::endl;
+				// std::cout << "[ACCEPT_NOW] server_ip:"<<server_addr_in->sin_addr.s_addr<< std::endl;
 
-				returnSystemCall(syscallUUID, new_connection->sockfd);
+				returnSystemCall(syscallUUID, check_tcp->sockfd);
 				listen_to_accept->sock_is_server->accepted_list.erase(check_tcp);
 				returned = true;
 				break;
@@ -949,4 +967,57 @@ bool TCPAssignment::accept_now(Sock * listen_to_accept, UUID syscallUUID){
 	return returned;
 }
 
+
+struct sockaddr_in * TCPAssignment::get_server_addr(int fd, sockaddr_in * client_addr_in, std::vector<connection_TCP> * befOrConlist){
+  std::vector<connection_TCP>::iterator connection;
+  std::vector<connection_TCP> list = *befOrConlist;
+  // std::cout << "[find_connection] here"<< std::endl;
+  for( connection = list.begin(); connection!= list.end(); connection++)
+  {
+    struct sockaddr_in * addr_in = connection->client_addr_in;
+    if(addr_in->sin_port == client_addr_in->sin_port &&
+				addr_in->sin_addr.s_addr == client_addr_in->sin_addr.s_addr &&
+        fd == connection->sockfd){
+          return connection->server_addr_in;
+    }
+  }
+	return NULL;
+}
+
+void TCPAssignment::write_packet(Packet * pck, uint8_t flagfield, uint32_t src_ip, uint32_t dest_ip,
+										uint16_t src_port, uint16_t dest_port,
+										uint32_t seq_no, uint32_t ack_no){
+
+	uint8_t header_length = 0x50;
+	uint16_t window_size = htons(0xc800);
+	uint8_t tcp_header_buffer[20];
+
+	pck->writeData(14+12, &src_ip, 4);
+	pck->writeData(14+16, &dest_ip, 4);
+	pck->writeData(14+20, &src_port, 2);
+	pck->writeData(14+22, &dest_port, 2);
+	pck->writeData(14+24, &seq_no, 4);
+	pck->writeData(14+28, &ack_no, 4);
+	pck->writeData(14+28+4, &header_length, 1);
+	pck->writeData(14+28+4+1, &flagfield, 1);
+	pck->writeData(14+33+1, &window_size, 2);
+	pck->readData(14+20, tcp_header_buffer,20 );
+
+	uint16_t checksum = NetworkUtil::tcp_sum(src_ip,dest_ip,tcp_header_buffer,20);
+	checksum = ~checksum;
+	if(checksum == 0xFFFF) checksum = 0;
+	checksum = htons(checksum);
+	pck->writeData(14+ 32+1+1+2, (uint8_t*)&checksum, 2);
+
+}
+
+bool TCPAssignment::send_client_fin(uint32_t src_ip, uint32_t dest_ip, uint16_t src_port, uint16_t dest_port){
+
+}
+
+bool TCPAssignment::send_server_fin(uint32_t src_ip, uint32_t dest_ip, uint16_t src_port, uint16_t dest_port){
+
+}
+
+//END DECLARATION
 }

@@ -63,9 +63,15 @@ namespace E{
   enum State{
     CLOSED,
     SYN_SENT,
-    ESTABLISHED,
+    ESTB,
     SYN_LISTEN,
     SYN_RCVD,
+    FIN_WAIT1,
+    FIN_WAIT2,
+    TIMED_WAIT,
+    CLOSE_WAIT,
+    LAST_ACK
+
   };
 
 /**********************************************************************
@@ -77,7 +83,7 @@ namespace E{
   struct server_TCP {
   	enum State state;
   	struct sockaddr * client_addr; // socket address of tcp client
-  	// struct sockaddr * server_addr; // socket address of tcp client
+  	struct sockaddr * server_addr; // socket address of tcp client
     int sockfd;
     UUID syscallblock;
   	uint32_t server_sn;
@@ -105,7 +111,7 @@ namespace E{
   };
 
   class Sock{
-  	//SystemCallParameter param;
+
   public:
   	int domain;
   	int type;
@@ -113,30 +119,16 @@ namespace E{
   	int binded; // 0 : not binded, 1 : binded
     int sockfd;
   	int pid;
-
-  private:
   	struct sockaddr * addr;
-
-
-
-  public:
     UUID syscallblock; // syscallUUID to return syscall when accept done
-    // enum State state;
-    // struct sockaddr * listen_addr;
-
-  public:
-  	Sock(int domain, int type, int protocol, int sockfd);
-  	virtual ~Sock();
-    virtual void set_sockaddr(struct sockaddr * sockaddr, int addrlen);
-    virtual struct sockaddr * get_sockaddr(void);
+    UUID timer_key;
 
     class Server_sock{
 
     public:
       std::vector<server_TCP> pending_list; // list of pending connections (only SYN_RCVD state is available here)
       std::vector<server_TCP> accepted_list; // list of connections to be accepted (only ESTABLISHED state is available here)
-      int backlog; //
-      // int pid; // pid for new socket for new client when accept done
+      int backlog;
       enum State state;
       Server_sock(Sock * sock);
       virtual ~Server_sock();
@@ -150,6 +142,10 @@ namespace E{
       virtual ~Client_sock();
     };
 
+
+  public:
+  	Sock(int domain, int type, int protocol, int sockfd);
+  	virtual ~Sock();
     Server_sock * sock_is_server;
     Client_sock * sock_is_client;
   };

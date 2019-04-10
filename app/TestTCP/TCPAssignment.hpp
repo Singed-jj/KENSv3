@@ -57,8 +57,17 @@ protected:
 	virtual void systemCallback(UUID syscallUUID, int pid, const SystemCallParameter& param) final;
 	virtual void packetArrived(std::string fromModule, Packet* packet) final;
 	virtual int get_connection_no(uint32_t src_ip, uint32_t dest_ip, uint16_t src_port, uint16_t dest_port) final;
-	virtual struct connection_TCP find_connection(uint32_t src_ip, uint32_t dest_ip, uint16_t src_port, uint16_t dest_port) final;
+	virtual struct connection_TCP find_connection(uint32_t src_ip, uint32_t dest_ip, uint16_t src_port, uint16_t dest_port, std::vector<connection_TCP> * befOrConlist) final;
 	virtual bool accept_now(Sock * listen_to_accept, UUID syscallUUID) final;
+	virtual void bef_to_con(uint32_t src_ip, uint32_t dest_ip, uint16_t src_port, uint16_t dest_port) final;
+	virtual struct sockaddr_in * get_server_addr(int fd, sockaddr_in * client_addr_in, std::vector<connection_TCP> * befOrConlist) final;
+
+	virtual void write_packet(Packet * pck, uint8_t flagfield, uint32_t src_ip, uint32_t dest_ip,
+											uint16_t src_port, uint16_t dest_port,
+											uint32_t seq_no, uint32_t ack_no) final;
+	virtual bool send_client_fin(uint32_t src_ip, uint32_t dest_ip, uint16_t src_port, uint16_t dest_port) final;
+	virtual bool send_server_fin(uint32_t src_ip, uint32_t dest_ip, uint16_t src_port, uint16_t dest_port) final;
+
 };
 
 class TCPAssignmentProvider
