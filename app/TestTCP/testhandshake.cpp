@@ -44,7 +44,7 @@ protected:
 		addr.sin_addr.s_addr = inet_addr(env["LISTEN_ADDR"].c_str());
 		addr.sin_port = htons(atoi(env["LISTEN_PORT"].c_str()));
 
-		std::cout << "[TestHandshake_Accept] server socket fd:"<<server_socket << std::endl;
+		// std::cout << "[TestHandshake_Accept] server socket fd:"<<server_socket << std::endl;
 		int ret = bind(server_socket, (struct sockaddr*)&addr, len);
 		EXPECT_EQ(ret, 0);
 
@@ -70,7 +70,7 @@ protected:
 			memset(&client_addr, 0, client_len);
 			int client_fd = accept(server_socket, (struct sockaddr*)&client_addr, &client_len);
 
-														std::cout << "[testhandshake] cfd:"<<client_fd<< std::endl;
+														// std::cout << "[testhandshake] cfd:"<<client_fd<< std::endl;
 			if(client_fd >= 0)
 			{
 
@@ -83,8 +83,8 @@ protected:
 				socklen_t temp_len = sizeof(temp_addr);
 				int ret = getsockname(client_fd, (struct sockaddr*)&temp_addr, &temp_len);
 				EXPECT_EQ(ret, 0);
-				std::cout << "[testhandshake] addr:"<<addr.sin_addr.s_addr<< std::endl;
-				std::cout << "[testhandshake] temp:"<<temp_addr.sin_addr.s_addr<< std::endl;
+				// std::cout << "[testhandshake] addr:"<<addr.sin_addr.s_addr<< std::endl;
+				// std::cout << "[testhandshake] temp:"<<temp_addr.sin_addr.s_addr<< std::endl;
 				EXPECT_TRUE( (addr.sin_addr.s_addr == 0) ||
 						(addr.sin_addr.s_addr == temp_addr.sin_addr.s_addr));
 				EXPECT_EQ(addr.sin_family, temp_addr.sin_family);
@@ -596,100 +596,100 @@ TEST_F(TestEnv_Any, TestConnect_AfterAccept)
 
 	this->runTest();
 }
-//
-// class TestHandshake_SimultaneousConnect : public SystemCallApplication, private TCPApplication
-// {
-// public:
-// 	TestHandshake_SimultaneousConnect(Host* host, const std::unordered_map<std::string, std::string> &env) : SystemCallApplication(host), TCPApplication(this)
-// 	{
-// 		this->env = env;
-// 	}
-// protected:
-// 	std::unordered_map<std::string, std::string> env;
-// protected:
-// 	void E_Main()
-// 	{
-// 		long connect_time = atol(env["CONNECT_TIME"].c_str());
-// 		usleep(connect_time);
-//
-// 		int client_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-//
-// 		struct sockaddr_in bind_addr;
-// 		socklen_t bind_len = sizeof(bind_addr);
-// 		memset(&bind_addr, 0, bind_len);
-//
-// 		bind_addr.sin_family = AF_INET;
-// 		bind_addr.sin_addr.s_addr = inet_addr(env["BIND_ADDR"].c_str());
-// 		bind_addr.sin_port = htons(atoi(env["BIND_PORT"].c_str()));
-//
-// 		std::cout << "[TestHandshake_Accept] client" << std::endl;
-// 		int ret = bind(client_socket, (struct sockaddr*)&bind_addr, bind_len);
-// 		EXPECT_EQ(ret, 0);
-//
-// 		struct sockaddr_in addr;
-// 		socklen_t len = sizeof(addr);
-// 		memset(&addr, 0, len);
-//
-// 		addr.sin_family = AF_INET;
-// 		addr.sin_addr.s_addr = inet_addr(env["CONNECT_ADDR"].c_str());
-// 		addr.sin_port = htons(atoi(env["CONNECT_PORT"].c_str()));
-//
-// 		ret = connect(client_socket, (struct sockaddr*)&addr, len);
-// 		EXPECT_EQ(ret, 0);
-//
-// 		struct sockaddr_in temp_addr;
-// 		socklen_t temp_len = sizeof(temp_addr);
-// 		ret = getpeername(client_socket, (struct sockaddr*)&temp_addr, &temp_len);
-// 		EXPECT_EQ(ret, 0);
-// 		EXPECT_EQ(addr.sin_addr.s_addr, temp_addr.sin_addr.s_addr);
-// 		EXPECT_EQ(addr.sin_family, temp_addr.sin_family);
-// 		EXPECT_EQ(addr.sin_port, temp_addr.sin_port);
-//
-// 		ret = getsockname(client_socket, (struct sockaddr*)&temp_addr, &temp_len);
-// 		EXPECT_EQ(ret, 0);
-//
-// 		EXPECT_EQ(bind_addr.sin_addr.s_addr, temp_addr.sin_addr.s_addr);
-// 		EXPECT_EQ(bind_addr.sin_family, temp_addr.sin_family);
-// 		EXPECT_EQ(bind_addr.sin_port, temp_addr.sin_port);
-//
-// 		close(client_socket);
-// 	}
-// };
 
-// TEST_F(TestEnv_Any, TestConnect_SimultaneousConnect)
-// {
-// 	std::unordered_map<std::string, std::string> connect_env;
-//
-// 	uint8_t ip1[4];
-// 	uint8_t ip2[4];
-// 	host1->getIPAddr(ip1, 0);
-// 	host2->getIPAddr(ip2, 0);
-//
-// 	char str_buffer[128];
-// 	snprintf(str_buffer, sizeof(str_buffer), "%u.%u.%u.%u", ip1[0], ip1[1], ip1[2], ip1[3]);
-// 	std::string host1_ip(str_buffer);
-// 	snprintf(str_buffer, sizeof(str_buffer), "%u.%u.%u.%u", ip2[0], ip2[1], ip2[2], ip2[3]);
-// 	std::string host2_ip(str_buffer);
-//
-// 	connect_env["CONNECT_ADDR"] = host2_ip;
-// 	connect_env["CONNECT_PORT"] = "12345";
-// 	connect_env["BIND_ADDR"] = host1_ip;
-// 	connect_env["BIND_PORT"] = "22222";
-//
-//
-// 	connect_env["CONNECT_TIME"] = TimeUtil::printTime(TimeUtil::makeTime(1,TimeUtil::SEC), TimeUtil::USEC);
-// 	TestHandshake_SimultaneousConnect client1(host1, connect_env);
-//
-//
-// 	connect_env["CONNECT_ADDR"] = host1_ip;
-// 	connect_env["CONNECT_PORT"] = "22222";
-// 	connect_env["BIND_ADDR"] = host2_ip;
-// 	connect_env["BIND_PORT"] = "12345";
-// 	connect_env["CONNECT_TIME"] = TimeUtil::printTime(TimeUtil::makeTime(1,TimeUtil::SEC), TimeUtil::USEC);
-// 	TestHandshake_SimultaneousConnect client2(host2, connect_env);
-//
-// 	client1.initialize();
-// 	client2.initialize();
-//
-// 	this->runTest();
-// }
+class TestHandshake_SimultaneousConnect : public SystemCallApplication, private TCPApplication
+{
+public:
+	TestHandshake_SimultaneousConnect(Host* host, const std::unordered_map<std::string, std::string> &env) : SystemCallApplication(host), TCPApplication(this)
+	{
+		this->env = env;
+	}
+protected:
+	std::unordered_map<std::string, std::string> env;
+protected:
+	void E_Main()
+	{
+		long connect_time = atol(env["CONNECT_TIME"].c_str());
+		usleep(connect_time);
+
+		int client_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+		struct sockaddr_in bind_addr;
+		socklen_t bind_len = sizeof(bind_addr);
+		memset(&bind_addr, 0, bind_len);
+
+		bind_addr.sin_family = AF_INET;
+		bind_addr.sin_addr.s_addr = inet_addr(env["BIND_ADDR"].c_str());
+		bind_addr.sin_port = htons(atoi(env["BIND_PORT"].c_str()));
+
+		std::cout << "[TestHandshake_Accept] client" << std::endl;
+		int ret = bind(client_socket, (struct sockaddr*)&bind_addr, bind_len);
+		EXPECT_EQ(ret, 0);
+
+		struct sockaddr_in addr;
+		socklen_t len = sizeof(addr);
+		memset(&addr, 0, len);
+
+		addr.sin_family = AF_INET;
+		addr.sin_addr.s_addr = inet_addr(env["CONNECT_ADDR"].c_str());
+		addr.sin_port = htons(atoi(env["CONNECT_PORT"].c_str()));
+
+		ret = connect(client_socket, (struct sockaddr*)&addr, len);
+		EXPECT_EQ(ret, 0);
+
+		struct sockaddr_in temp_addr;
+		socklen_t temp_len = sizeof(temp_addr);
+		ret = getpeername(client_socket, (struct sockaddr*)&temp_addr, &temp_len);
+		EXPECT_EQ(ret, 0);
+		EXPECT_EQ(addr.sin_addr.s_addr, temp_addr.sin_addr.s_addr);
+		EXPECT_EQ(addr.sin_family, temp_addr.sin_family);
+		EXPECT_EQ(addr.sin_port, temp_addr.sin_port);
+
+		ret = getsockname(client_socket, (struct sockaddr*)&temp_addr, &temp_len);
+		EXPECT_EQ(ret, 0);
+
+		EXPECT_EQ(bind_addr.sin_addr.s_addr, temp_addr.sin_addr.s_addr);
+		EXPECT_EQ(bind_addr.sin_family, temp_addr.sin_family);
+		EXPECT_EQ(bind_addr.sin_port, temp_addr.sin_port);
+
+		close(client_socket);
+	}
+};
+
+TEST_F(TestEnv_Any, TestConnect_SimultaneousConnect)
+{
+	std::unordered_map<std::string, std::string> connect_env;
+
+	uint8_t ip1[4];
+	uint8_t ip2[4];
+	host1->getIPAddr(ip1, 0);
+	host2->getIPAddr(ip2, 0);
+
+	char str_buffer[128];
+	snprintf(str_buffer, sizeof(str_buffer), "%u.%u.%u.%u", ip1[0], ip1[1], ip1[2], ip1[3]);
+	std::string host1_ip(str_buffer);
+	snprintf(str_buffer, sizeof(str_buffer), "%u.%u.%u.%u", ip2[0], ip2[1], ip2[2], ip2[3]);
+	std::string host2_ip(str_buffer);
+
+	connect_env["CONNECT_ADDR"] = host2_ip;
+	connect_env["CONNECT_PORT"] = "12345";
+	connect_env["BIND_ADDR"] = host1_ip;
+	connect_env["BIND_PORT"] = "22222";
+
+
+	connect_env["CONNECT_TIME"] = TimeUtil::printTime(TimeUtil::makeTime(1,TimeUtil::SEC), TimeUtil::USEC);
+	TestHandshake_SimultaneousConnect client1(host1, connect_env);
+
+
+	connect_env["CONNECT_ADDR"] = host1_ip;
+	connect_env["CONNECT_PORT"] = "22222";
+	connect_env["BIND_ADDR"] = host2_ip;
+	connect_env["BIND_PORT"] = "12345";
+	connect_env["CONNECT_TIME"] = TimeUtil::printTime(TimeUtil::makeTime(1,TimeUtil::SEC), TimeUtil::USEC);
+	TestHandshake_SimultaneousConnect client2(host2, connect_env);
+
+	client1.initialize();
+	client2.initialize();
+
+	this->runTest();
+}

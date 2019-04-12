@@ -27,7 +27,10 @@ Sock::Sock(int domain, int type, int protocol, int sockfd){
 Sock::~Sock(){
   // delete this->addr;
   // this->sip_dip.clear();
+  // Server_sock::~Server_sock();
+  // Client_sock::~Client_sock();
 }
+
 
 
 

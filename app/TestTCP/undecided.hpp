@@ -86,8 +86,8 @@ namespace E{
   	struct sockaddr * server_addr; // socket address of tcp client
     int sockfd;
     UUID syscallblock;
-  	uint32_t server_sn;
-  	uint32_t client_sn;
+  	uint32_t myy_sn;
+  	uint32_t opp_sn;
   };
 
   /**********************************************************************
@@ -96,18 +96,19 @@ namespace E{
   *                                                                     *
   **********************************************************************/
 
-  struct client_TCP {
+  struct TCP {
   	enum State state;
-  	struct sockaddr* server_addr; // socket address of tcp server
-  	uint32_t server_sn;
-  	uint32_t client_sn;
+  	struct sockaddr* opp_addr; // socket address of tcp server
+  	uint32_t myy_sn;
+  	uint32_t opp_sn;
   };
 
 
   struct connection_TCP {
      int sockfd;
-     struct sockaddr_in * client_addr_in;
-     struct sockaddr_in * server_addr_in;
+     struct sockey * pidfd;
+     struct sockaddr_in * myy_addr_in;
+     struct sockaddr_in * opp_addr_in;
   };
 
   class Sock{
@@ -122,12 +123,15 @@ namespace E{
   	struct sockaddr * addr;
     UUID syscallblock; // syscallUUID to return syscall when accept done
     UUID timer_key;
+    enum State state;
+    struct TCP fin_pending_info;
 
     class Server_sock{
 
     public:
       std::vector<server_TCP> pending_list; // list of pending connections (only SYN_RCVD state is available here)
       std::vector<server_TCP> accepted_list; // list of connections to be accepted (only ESTABLISHED state is available here)
+      struct TCP pending_info;
       int backlog;
       enum State state;
       Server_sock(Sock * sock);
@@ -137,7 +141,7 @@ namespace E{
     class Client_sock{
 
     public:
-      struct client_TCP pending_info; // TCP state, server address of pending connection, client & server isn
+      struct TCP pending_info; // TCP state, server address of pending connection, client & server isn
       Client_sock(Sock * sock);
       virtual ~Client_sock();
     };

@@ -60,13 +60,15 @@ protected:
 	virtual struct connection_TCP find_connection(uint32_t src_ip, uint32_t dest_ip, uint16_t src_port, uint16_t dest_port, std::vector<connection_TCP> * befOrConlist) final;
 	virtual bool accept_now(Sock * listen_to_accept, UUID syscallUUID) final;
 	virtual void bef_to_con(uint32_t src_ip, uint32_t dest_ip, uint16_t src_port, uint16_t dest_port) final;
-	virtual struct sockaddr_in * get_server_addr(int fd, sockaddr_in * client_addr_in, std::vector<connection_TCP> * befOrConlist) final;
+	virtual void delete_con(uint32_t src_ip, uint32_t dest_ip, uint16_t src_port, uint16_t dest_port) final;
+	virtual struct sockaddr_in * get_opp_addr(int fd, sockaddr_in * client_addr_in, std::vector<connection_TCP> * befOrConlist) final;
+	// virtual struct sockaddr_in * get_client_addr(int fd, sockaddr_in * server_addr_in, std::vector<connection_TCP> * befOrConlist) final;
+
 
 	virtual void write_packet(Packet * pck, uint8_t flagfield, uint32_t src_ip, uint32_t dest_ip,
 											uint16_t src_port, uint16_t dest_port,
 											uint32_t seq_no, uint32_t ack_no) final;
-	virtual bool send_client_fin(uint32_t src_ip, uint32_t dest_ip, uint16_t src_port, uint16_t dest_port) final;
-	virtual bool send_server_fin(uint32_t src_ip, uint32_t dest_ip, uint16_t src_port, uint16_t dest_port) final;
+	virtual void close_r(Sock * sc) final;
 
 };
 
